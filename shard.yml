@@ -1,0 +1,9 @@
+name: sip_utils
+version: 0.1.0
+
+authors:
+  - Jovany Leandro G.C <bit4bit@riseup.net>
+
+crystal: '>= 1.16.0'
+
+license: MIT
