@@ -1,5 +1,4 @@
-# TODO: Write documentation for `SipUtils`
-module SipUtils
+module SIPUtils
   VERSION = "0.1.0"
 
   class Network::SIP(T)
