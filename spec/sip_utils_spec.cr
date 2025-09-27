@@ -7,6 +7,25 @@ describe SIPUtils::Network::SIP do
     response.headers["Via"].should eq("SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj")
   end
 
+  it "parse SIP response application/sdp" do
+    sdp_body = "v=0\no=alice 2890844526 2890844526 IN IP4 host.atlanta.com\ns=-\nc=IN IP4 host.atlanta.com\nt=0 0\nm=audio 49170 RTP/AVP 0\na=rtpmap:0 PCMU/8000"
+    content_type = "application/sdp"
+    sip_message = "SIP/2.0 200 OK\r\nVia: SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj\r\nFrom: Alice <sip:alice@example.com>;tag=12345\r\nTo: Bob <sip:bob@example.com>;tag=67890\r\nCall-ID: 1234567890@example.com\r\nCSeq: 1 INVITE\r\nContent-Type: #{content_type}\r\nContent-Length: #{sdp_body.size}\r\n\r\n#{sdp_body}"
+    response = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Response).parse(IO::Memory.new(sip_message))
+
+    response.headers["Content-Type"].should eq(content_type)
+    response.body.should eq(sdp_body)
+
+    sdp = SIPUtils::Network::SIP(SIPUtils::Network::SIP::SDP).parse(IO::Memory.new(sdp_body))
+    sdp.version.should eq(0)
+    sdp.origin.should eq("alice 2890844526 2890844526 IN IP4 host.atlanta.com")
+    sdp.session_name.should eq("-")
+    sdp.connection.should eq("IN IP4 host.atlanta.com")
+    sdp.time.should eq("0 0")
+    sdp.media.should eq("audio 49170 RTP/AVP 0")
+    sdp.attributes.should eq(["rtpmap:0 PCMU/8000"])
+  end
+
   it "parse SIP Request" do
     request = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Request).parse(IO::Memory.new("INVITE sip:bob@example.com SIP/2.0\r\nVia: SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj\r\nFrom: Alice <sip:alice@example.com>;tag=12345\r\nTo: Bob <sip:bob@example.com>;tag=67890\r\nCall-ID: 1234567890@example.com\r\nCSeq: 1 INVITE\r\nContent-Length: 0\r\n\r\n"))
 

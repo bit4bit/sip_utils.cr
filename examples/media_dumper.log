@@ -1,0 +1,211 @@
+------------------------------------------------------------------------
+REGISTER sip:172.15.238.10 SIP/2.0
+Via: SIP/2.0/UDP 172.15.238.1;rport;branch=z9hG4bKdnlebnrk
+Max-Forwards: 70
+To: <sip:1000@172.15.238.10>
+From: <sip:1000@172.15.238.10>;tag=pdzrw
+Call-ID: ycojgypvoaodmwh@tere
+CSeq: 14 REGISTER
+Contact: <sip:1000@172.15.238.1>;expires=3600
+Allow: INVITE,ACK,BYE,CANCEL,OPTIONS,PRACK,REFER,NOTIFY,SUBSCRIBE,INFO,MESSAGE
+User-Agent: Twinkle/1.10.3
+Content-Length: 0
+
+send 564 bytes to udp/[172.15.238.1]:5060 at 16:04:03.857302:
+------------------------------------------------------------------------
+SIP/2.0 401 Unauthorized
+Via: SIP/2.0/UDP 172.15.238.1;rport=5060;branch=z9hG4bKdnlebnrk
+From: <sip:1000@172.15.238.10>;tag=pdzrw
+To: <sip:1000@172.15.238.10>;tag=cj05y9teX2aBN
+Call-ID: ycojgypvoaodmwh@tere
+CSeq: 14 REGISTER
+User-Agent: FreeSWITCH-mod_sofia/1.10.0~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY, PUBLISH, SUBSCRIBE
+Supported: timer, path, replaces
+WWW-Authenticate: Digest realm="172.15.238.10", nonce="db399230-6d42-4a3e-b642-bb8fe57218f7", algorithm=MD5, qop="auth"
+Content-Length: 0
+
+recv 641 bytes from udp/[172.15.238.1]:5060 at 16:04:06.834123:
+------------------------------------------------------------------------
+REGISTER sip:172.15.238.10 SIP/2.0
+Via: SIP/2.0/UDP 172.15.238.1;rport;branch=z9hG4bKuvokaagh
+Max-Forwards: 70
+To: <sip:1000@172.15.238.10>
+From: <sip:1000@172.15.238.10>;tag=pdzrw
+Call-ID: ycojgypvoaodmwh@tere
+CSeq: 15 REGISTER
+Contact: <sip:1000@172.15.238.1>;expires=3600
+Authorization: Digest username="1000",realm="172.15.238.10",nonce="db399230-6d42-4a3e-b642-bb8fe57218f7",uri="sip:172.15.238.10",response="dd7a2013b9a540ddecf78b1c2be28a86",algorithm=MD5,cnonce="35ef03ec54",qop=auth,nc=00000001
+Allow: INVITE,ACK,BYE,CANCEL,OPTIONS,PRACK,REFER,NOTIFY,SUBSCRIBE,INFO,MESSAGE
+User-Agent: Twinkle/1.10.3
+Content-Length: 0
+
+send 517 bytes to udp/[172.15.238.1]:5060 at 16:04:06.837224:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.15.238.1;rport=5060;branch=z9hG4bKuvokaagh
+From: <sip:1000@172.15.238.10>;tag=pdzrw
+To: <sip:1000@172.15.238.10>;tag=DUSy04BjtB1Xg
+Call-ID: ycojgypvoaodmwh@tere
+CSeq: 15 REGISTER
+Contact: <sip:1000@172.15.238.1>;expires=3600
+Date: Sat, 27 Sep 2025 16:04:06 GMT
+User-Agent: FreeSWITCH-mod_sofia/1.10.0~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY, PUBLISH, SUBSCRIBE
+Supported: timer, path, replaces
+Content-Length: 0
+
+recv 551 bytes from udp/[172.15.238.1]:5060 at 16:04:06.838110:
+------------------------------------------------------------------------
+
+# ACCEPT CALL
+
+send 1639 bytes to udp/[172.15.238.1]:5060 at 18:51:12.786728:
+------------------------------------------------------------------------
+INVITE sip:1000@172.15.238.1 SIP/2.0
+Via: SIP/2.0/UDP 46.131.85.159;rport;branch=z9hG4bKtyrgHjaQrZDNK
+Max-Forwards: 70
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+To: <sip:1000@172.15.238.1>
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945744 INVITE
+Contact: <sip:mod_sofia@46.131.85.159:5060>
+User-Agent: FreeSWITCH-mod_sofia/1.10.0~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY, PUBLISH, SUBSCRIBE
+Supported: timer, path, replaces
+Allow-Events: talk, hold, conference, presence, as-feature-event, dialog, line-seize, call-info, sla, include-session-description, presence.winfo, message-summary, refer
+Content-Type: application/sdp
+Content-Disposition: session
+Content-Length: 744
+X-FS-Support: update_display,send_info
+Remote-Party-ID: <sip:0000000000@172.15.238.10>;party=calling;screen=yes;privacy=off
+
+v=0
+o=FreeSWITCH 1758979432 1758979433 IN IP4 172.15.238.10
+s=FreeSWITCH
+c=IN IP4 172.15.238.10
+t=0 0
+m=audio 19640 RTP/AVP 102 9 0 8 105 101
+a=rtpmap:102 opus/48000/2
+a=fmtp:102 useinbandfec=1; maxaveragebitrate=30000; maxplaybackrate=48000; ptime=20; minptime=10; maxptime=40
+a=rtpmap:9 G722/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:105 telephone-event/48000
+a=fmtp:105 0-16
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-16
+a=ptime:20
+m=video 31280 RTP/AVP 103 104
+b=AS:3072
+a=rtpmap:103 H264/90000
+a=rtpmap:104 VP8/90000
+a=rtcp-fb:103 ccm fir
+a=rtcp-fb:103 ccm tmmbr
+a=rtcp-fb:103 nack
+a=rtcp-fb:103 nack pli
+a=rtcp-fb:104 ccm fir
+a=rtcp-fb:104 ccm tmmbr
+a=rtcp-fb:104 nack
+a=rtcp-fb:104 nack pli
+
+recv 315 bytes from udp/[172.15.238.1]:5060 at 18:51:12.787641:
+------------------------------------------------------------------------
+SIP/2.0 100 Trying
+Via: SIP/2.0/UDP 46.131.85.159;received=172.15.238.10;rport=5060;branch=z9hG4bKtyrgHjaQrZDNK
+To: <sip:1000@172.15.238.1>
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945744 INVITE
+Server: Twinkle/1.10.3
+Content-Length: 0
+
+recv 360 bytes from udp/[172.15.238.1]:5060 at 18:51:12.787711:
+------------------------------------------------------------------------
+SIP/2.0 180 Ringing
+Via: SIP/2.0/UDP 46.131.85.159;received=172.15.238.10;rport=5060;branch=z9hG4bKtyrgHjaQrZDNK
+To: <sip:1000@172.15.238.1>;tag=qfkpv
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945744 INVITE
+Contact: <sip:1000@172.15.238.1>
+Server: Twinkle/1.10.3
+Content-Length: 0
+
+recv 965 bytes from udp/[172.15.238.1]:5060 at 18:51:15.079619:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 46.131.85.159;received=172.15.238.10;rport=5060;branch=z9hG4bKtyrgHjaQrZDNK
+To: <sip:1000@172.15.238.1>;tag=qfkpv
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945744 INVITE
+Contact: <sip:1000@172.15.238.1>
+Content-Type: application/sdp
+Allow: INVITE,ACK,BYE,CANCEL,OPTIONS,PRACK,REFER,NOTIFY,SUBSCRIBE,INFO,MESSAGE
+Server: Twinkle/1.10.3
+Supported: replaces,norefersub
+Content-Length: 465
+
+v=0
+o=twinkle 266466665 709323958 IN IP4 172.15.238.1
+s=-
+c=IN IP4 172.15.238.1
+t=0 0
+m=audio 8000 RTP/AVP 0 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+m=video 0 RTP/AVP 103 104
+a=rtpmap:103 H264/90000
+a=rtpmap:104 VP8/90000
+a=rtcp-fb:103 ccm fir
+a=rtcp-fb:103 ccm tmmbr
+a=rtcp-fb:103 nack
+a=rtcp-fb:103 nack pli
+a=rtcp-fb:104 ccm fir
+a=rtcp-fb:104 ccm tmmbr
+a=rtcp-fb:104 nack
+a=rtcp-fb:104 nack pli
+
+send 348 bytes to udp/[172.15.238.1]:5060 at 18:51:15.080880:
+------------------------------------------------------------------------
+ACK sip:1000@172.15.238.1 SIP/2.0
+Via: SIP/2.0/UDP 46.131.85.159;rport;branch=z9hG4bKU7H9jDUtN837e
+Max-Forwards: 70
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+To: <sip:1000@172.15.238.1>;tag=qfkpv
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945744 ACK
+Contact: <sip:mod_sofia@46.131.85.159:5060>
+Content-Length: 0
+
+
+## HANGUP CALL
+
+send 541 bytes to udp/[172.15.238.1]:5060 at 18:51:15.086913:
+------------------------------------------------------------------------
+BYE sip:1000@172.15.238.1 SIP/2.0
+Via: SIP/2.0/UDP 46.131.85.159;rport;branch=z9hG4bKvgB2m8ByjHtta
+Max-Forwards: 70
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+To: <sip:1000@172.15.238.1>;tag=qfkpv
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945745 BYE
+User-Agent: FreeSWITCH-mod_sofia/1.10.0~64bit
+Allow: INVITE, ACK, BYE, CANCEL, OPTIONS, MESSAGE, INFO, UPDATE, REGISTER, REFER, NOTIFY, PUBLISH, SUBSCRIBE
+Supported: timer, path, replaces
+Reason: Q.850;cause=16;text="NORMAL_CLEARING"
+Content-Length: 0
+
+recv 318 bytes from udp/[172.15.238.1]:5060 at 18:51:15.087550:
+------------------------------------------------------------------------
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 46.131.85.159;received=172.15.238.10;rport=5060;branch=z9hG4bKvgB2m8ByjHtta
+To: <sip:1000@172.15.238.1>;tag=qfkpv
+From: <sip:0000000000@172.15.238.10>;tag=gQe2yQSDN3ccp
+Call-ID: c7cf584d-1675-123f-3c8c-0242ac0fee0a
+CSeq: 104945745 BYE
+Server: Twinkle/1.10.3
+Content-Length: 0
