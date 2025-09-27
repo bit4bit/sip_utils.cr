@@ -49,7 +49,7 @@ module SIPUtils
   class Network::SIP(T)
     alias Headers = Hash(String, String)
     enum Status
-      Ok = 200
+      Ok           = 200
     end
 
     class SIPError < Exception
