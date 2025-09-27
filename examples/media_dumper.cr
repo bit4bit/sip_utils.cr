@@ -67,6 +67,10 @@ class SimplePhone
       media_parts = sdp.media.split(" ")
       remote_media_port = media_parts[1].to_i
 
+      # Extract remote IP from SDP connection
+      connection_parts = sdp.connection.split(" ")
+      remote_media_ip = connection_parts[2]
+
       # Create our media port
       media_socket = UDPSocket.new
       media_socket.bind("172.15.238.1", 0)
@@ -103,19 +107,53 @@ class SimplePhone
       Log.info { "Sent 200 OK response with media port #{local_media_port}" }
 
       # Transition to InCall state and return it
-      State::InCall.new(@inbound_socket, @outbound_socket, @root_request, media_socket)
+      State::InCall.new(@inbound_socket, @outbound_socket, @root_request, media_socket, remote_media_ip, remote_media_port)
     end
   end
 
   class State::InCall < StateBehavior
-    def initialize(@inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request, @media_socket : UDPSocket)
+    @cn_sequence : UInt16
+    @cn_timestamp : UInt32
+    @cn_ssrc : UInt32
+    @last_packet_time : Time::Span
+
+    def initialize(@inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request, @media_socket : UDPSocket, @remote_ip : String, @remote_port : Int32)
       @stop = false
       @started = false
+      @cn_sequence = 1_u16
+      @cn_timestamp = 0_u32
+      @cn_ssrc = Random.rand(UInt32)
+      @last_packet_time = Time.monotonic
     end
 
     def start
       return if @started
       @started = true
+
+      # Start comfort noise sender
+      spawn do
+        Log.debug { "Starting comfort noise sender to #{@remote_ip}:#{@remote_port}" }
+        begin
+          loop do
+            break if @stop
+
+            # Send comfort noise every 20ms if no recent activity
+            current_time = Time.monotonic
+            if current_time - @last_packet_time > 100.milliseconds
+              cn_packet = SIPUtils::RTP::Packet.create_comfort_noise(@cn_sequence, @cn_timestamp, @cn_ssrc)
+              @media_socket.send(cn_packet, to: Socket::IPAddress.new(@remote_ip, @remote_port))
+              @cn_sequence += 1
+              @cn_timestamp += 160 # 20ms at 8kHz
+              Log.debug { "Sent comfort noise packet (seq: #{@cn_sequence - 1})" }
+            end
+
+            sleep(20.milliseconds)
+          end
+        rescue ex : Exception
+          Log.error { "Comfort noise sender error: #{ex.message}" }
+        end
+      end
+
       spawn do
         Log.debug { "Starting media dump to /tmp/media_dumper.raw on port #{@media_socket.local_address.port}" }
         begin
@@ -127,6 +165,7 @@ class SimplePhone
 
               begin
                 bytes_read, sender_addr = @media_socket.receive(buffer)
+                @last_packet_time = Time.monotonic # Update last packet time
                 rtp_packet = SIPUtils::RTP::Packet.parse(buffer[0, bytes_read])
                 if rtp_packet
                   file.write(rtp_packet.payload)

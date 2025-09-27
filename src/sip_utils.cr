@@ -234,6 +234,35 @@ module SIPUtils
 
         new(payload_type.to_u8, sequence_number, payload)
       end
+
+      def self.create_comfort_noise(sequence_number : UInt16, timestamp : UInt32, ssrc : UInt32) : Bytes
+        header = Bytes.new(12)
+
+        # Version=2, Padding=0, Extension=0, CSRC=0, Marker=0, PT=13 (CN)
+        header[0] = 0x80_u8
+        header[1] = 13_u8 # Comfort Noise payload type
+
+        # Sequence number (big endian)
+        header[2] = ((sequence_number >> 8) & 0xFF).to_u8
+        header[3] = (sequence_number & 0xFF).to_u8
+
+        # Timestamp (big endian)
+        header[4] = ((timestamp >> 24) & 0xFF).to_u8
+        header[5] = ((timestamp >> 16) & 0xFF).to_u8
+        header[6] = ((timestamp >> 8) & 0xFF).to_u8
+        header[7] = (timestamp & 0xFF).to_u8
+
+        # SSRC (big endian)
+        header[8] = ((ssrc >> 24) & 0xFF).to_u8
+        header[9] = ((ssrc >> 16) & 0xFF).to_u8
+        header[10] = ((ssrc >> 8) & 0xFF).to_u8
+        header[11] = (ssrc & 0xFF).to_u8
+
+        # Comfort noise payload (1 byte with noise level)
+        payload = Bytes[0x40_u8] # -40 dBm0 noise level
+
+        header + payload
+      end
     end
   end
 end

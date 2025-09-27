@@ -116,4 +116,38 @@ describe SIPUtils::Network::SIP do
       packet.payload.should eq(Bytes[0x12, 0x34])
     end
   end
+
+  it "create RTP comfort noise packet" do
+    sequence = 12345_u16
+    timestamp = 8000_u32
+    ssrc = 0x12345678_u32
+
+    cn_packet = SIPUtils::RTP::Packet.create_comfort_noise(sequence, timestamp, ssrc)
+
+    # Verify packet structure
+    cn_packet.size.should eq(13) # 12 byte header + 1 byte payload
+
+    # Verify RTP header
+    cn_packet[0].should eq(0x80) # V=2, P=0, X=0, CC=0
+    cn_packet[1].should eq(13)   # M=0, PT=13 (Comfort Noise)
+
+    # Verify sequence number
+    cn_packet[2].should eq(0x30) # 12345 >> 8
+    cn_packet[3].should eq(0x39) # 12345 & 0xFF
+
+    # Verify timestamp
+    cn_packet[4].should eq(0x00) # 8000 >> 24
+    cn_packet[5].should eq(0x00) # (8000 >> 16) & 0xFF
+    cn_packet[6].should eq(0x1F) # (8000 >> 8) & 0xFF
+    cn_packet[7].should eq(0x40) # 8000 & 0xFF
+
+    # Verify SSRC
+    cn_packet[8].should eq(0x12)  # ssrc >> 24
+    cn_packet[9].should eq(0x34)  # (ssrc >> 16) & 0xFF
+    cn_packet[10].should eq(0x56) # (ssrc >> 8) & 0xFF
+    cn_packet[11].should eq(0x78) # ssrc & 0xFF
+
+    # Verify comfort noise payload
+    cn_packet[12].should eq(0x40) # Noise level -40 dBm0
+  end
 end
