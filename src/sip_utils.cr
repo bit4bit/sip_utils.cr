@@ -1,6 +1,51 @@
 module SIPUtils
   VERSION = "0.1.0"
 
+  module Network
+    def self.encode(message)
+      case message
+      when SIP::Request
+        String.build do |str|
+          str << message.method
+          str << " "
+          str << message.uri
+          str << " "
+          str << message.version
+          str << "\r\n"
+
+          message.headers.each do |key, value|
+            str << key
+            str << ": "
+            str << value
+            str << "\r\n"
+          end
+
+          str << "\r\n"
+        end
+      when SIP::Response
+        String.build do |str|
+          str << message.version
+          str << " "
+          str << message.status_code
+          str << " "
+          str << message.status
+          str << "\r\n"
+
+          message.headers.each do |key, value|
+            str << key
+            str << ": "
+            str << value
+            str << "\r\n"
+          end
+
+          str << "\r\n"
+        end
+      else
+        raise SIP::SIPError.new("Unsupported message type")
+      end
+    end
+  end
+
   class Network::SIP(T)
     alias Headers = Hash(String, String)
     enum Status
