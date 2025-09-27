@@ -199,7 +199,7 @@ module SIPUtils
       end
 
       body = ""
-      content_length = headers["Content-Length"].not_nil!.to_i
+      content_length = headers["Content-Length"]?.try(&.to_i) || 0
       if content_length > 0
         buffer = Bytes.new(content_length)
         io.read_fully(buffer)
@@ -207,6 +207,33 @@ module SIPUtils
       end
 
       yield headers, body
+    end
+  end
+
+  module RTP
+    class Packet
+      getter :payload_type, :sequence_number, :payload
+
+      def initialize(@payload_type : UInt8, @sequence_number : UInt16, @payload : Bytes)
+      end
+
+      def self.parse(data : Bytes) : Packet?
+        return nil if data.size < 12
+
+        version = (data[0] >> 6) & 0x03
+        return nil if version != 2
+
+        csrc_count = data[0] & 0x0F
+        payload_type = data[1] & 0x7F
+        sequence_number = ((data[2].to_u16 << 8) | data[3].to_u16)
+
+        header_size = 12 + (csrc_count * 4)
+        return nil if data.size < header_size
+
+        payload = data[header_size, data.size - header_size]
+
+        new(payload_type.to_u8, sequence_number, payload)
+      end
     end
   end
 end

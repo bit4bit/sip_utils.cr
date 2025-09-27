@@ -64,4 +64,56 @@ describe SIPUtils::Network::SIP do
     SIPUtils::Network::SIP(SIPUtils::Network::SIP::Request).valid?(IO::Memory.new("SIP/2.0 200 OK\r\nVia: SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj\r\nFrom: Alice <sip:alice@example.com>;tag=12345\r\nTo: Bob <sip:bob@example.com>;tag=67890\r\nCall-ID: 1234567890@example.com\r\nCSeq: 1 INVITE\r\nContent-Length: 0\r\n\r\n")).should be_false
     SIPUtils::Network::SIP(SIPUtils::Network::SIP::Response).valid?(IO::Memory.new("INVITE sip:bob@example.com SIP/2.0\r\nVia: SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj\r\nFrom: Alice <sip:alice@example.com>;tag=12345\r\nTo: Bob <sip:bob@example.com>;tag=67890\r\nCall-ID: 1234567890@example.com\r\nCSeq: 1 INVITE\r\nContent-Length: 0\r\n\r\n")).should be_false
   end
+
+  it "parse RTP packet and extract payload" do
+    # Create a simple RTP packet with PCMU payload
+    # Version=2, No padding, No extension, CC=0, No marker, PT=0 (PCMU), Seq=12345, TS=67890, SSRC=0x12345678
+    rtp_data = Bytes[
+      0x80, 0x00,             # V=2, P=0, X=0, CC=0, M=0, PT=0
+      0x30, 0x39,             # Sequence number: 12345
+      0x00, 0x01, 0x09, 0x32, # Timestamp: 67890
+      0x12, 0x34, 0x56, 0x78, # SSRC: 0x12345678
+      0xDE, 0xAD, 0xBE, 0xEF  # Payload: 4 bytes
+    ]
+
+    packet = SIPUtils::RTP::Packet.parse(rtp_data)
+    packet.should_not be_nil
+
+    if packet
+      packet.payload_type.should eq(0)
+      packet.sequence_number.should eq(12345)
+      packet.payload.should eq(Bytes[0xDE, 0xAD, 0xBE, 0xEF])
+    end
+  end
+
+  it "reject invalid RTP packet" do
+    # Invalid packet - too short
+    short_data = Bytes[0x80, 0x00, 0x30]
+    packet = SIPUtils::RTP::Packet.parse(short_data)
+    packet.should be_nil
+
+    # Invalid version
+    invalid_version = Bytes[0x40, 0x00, 0x30, 0x39, 0x00, 0x01, 0x09, 0x32, 0x12, 0x34, 0x56, 0x78]
+    packet = SIPUtils::RTP::Packet.parse(invalid_version)
+    packet.should be_nil
+  end
+
+  it "parse RTP packet with CSRC" do
+    # RTP packet with CC=1 (one CSRC)
+    rtp_data = Bytes[
+      0x81, 0x00,             # V=2, P=0, X=0, CC=1, M=0, PT=0
+      0x00, 0x01,             # Sequence number: 1
+      0x00, 0x00, 0x00, 0x64, # Timestamp: 100
+      0x11, 0x22, 0x33, 0x44, # SSRC
+      0xAA, 0xBB, 0xCC, 0xDD, # CSRC[0]
+      0x12, 0x34              # Payload: 2 bytes
+    ]
+
+    packet = SIPUtils::RTP::Packet.parse(rtp_data)
+    packet.should_not be_nil
+
+    if packet
+      packet.payload.should eq(Bytes[0x12, 0x34])
+    end
+  end
 end

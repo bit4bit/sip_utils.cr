@@ -5,7 +5,9 @@
 * Think carefully before choosing names for functions, variables, or modules.
 * Write short, clear, and concise code.
 * Use functional paradigms for code organization.
-
+* Do not add unnecessary code.
+* Do not add additional robustness unless explicitly requested.
+* Do not create examples unless explicitly requested.
 # Program
 
 * To execute run first `shards build`.
@@ -23,3 +25,4 @@ end
 * Do not explain the implementation details.
 * Always follow SOLID principles.
 * Always avoid duplicated code, reuse existing code.
+* Class initialization should not have side effects.
