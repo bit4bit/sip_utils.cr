@@ -26,3 +26,4 @@ end
 * Always follow SOLID principles.
 * Always avoid duplicated code, reuse existing code.
 * Class initialization should not have side effects.
+* Format code using `crystal tool format`.

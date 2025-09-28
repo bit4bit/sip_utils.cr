@@ -62,23 +62,35 @@ module Random
 end
 
 class SimplePhone
+  class Context
+    getter :media_dump_dir
+
+    def initialize(@media_dump_dir : String, @prefix : String = "")
+      @media_dump_dir = media_dump_dir
+    end
+
+    def media_dump_path(call_id : String)
+      File.join(@media_dump_dir, "#{@prefix}#{call_id}.wav")
+    end
+  end
+
   abstract class StateBehavior
-    def next
+    def next(context : Context)
       raise NotImplementedError.new("next() must be implemented")
     end
   end
 
   class State::Idle < StateBehavior
-    def next
+    def next(context : Context)
       self
     end
   end
 
   class State::Accepting < StateBehavior
-    def initialize(@inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request)
+    def initialize(context @inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request)
     end
 
-    def next
+    def next(context : Context)
       message, _ = @inbound_socket.receive(8096)
       request = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Request).parse(IO::Memory.new(message))
 
@@ -104,16 +116,16 @@ class SimplePhone
 
       # Create our media port
       media_socket = UDPSocket.new
-      media_socket.bind("172.15.238.1", 0)
+      media_socket.bind(@inbound_socket.local_address.address, 0)
       media_socket.read_timeout = 100.milliseconds
       local_media_port = media_socket.local_address.port
 
       # Create SDP response
       sdp_body = String.build do |str|
         str << "v=0\r\n"
-        str << "o=- #{Random.secure_number} #{Random.secure_number} IN IP4 172.15.238.1\r\n"
+        str << "o=- #{Random.secure_number} #{Random.secure_number} IN IP4 #{@inbound_socket.local_address.address}\r\n"
         str << "s=-\r\n"
-        str << "c=IN IP4 172.15.238.1\r\n"
+        str << "c=IN IP4 #{@inbound_socket.local_address.address}\r\n"
         str << "t=0 0\r\n"
         str << "m=audio #{local_media_port} RTP/AVP 0\r\n"
         str << "a=rtpmap:0 PCMU/8000\r\n"
@@ -157,9 +169,10 @@ class SimplePhone
       @last_packet_time = Time.monotonic
     end
 
-    def start
+    def start(context : Context)
       return if @started
       @started = true
+      media_dump_path = context.media_dump_path(@root_request.headers["Call-ID"])
 
       # Start comfort noise sender
       spawn do
@@ -186,9 +199,9 @@ class SimplePhone
       end
 
       spawn do
-        Log.debug { "Starting media dump to /tmp/media_dumper.wav on port #{@media_socket.local_address.port}" }
+        Log.debug { "Starting media dump to #{media_dump_path} on port #{@media_socket.local_address.port}" }
         begin
-          File.open("/tmp/media_dumper.wav", "wb") do |file|
+          File.open(media_dump_path, "wb") do |file|
             # Write initial WAV header with placeholder data size
             WAVEncoder.write_header(file, 0_u32)
             data_size = 0_u32
@@ -226,15 +239,15 @@ class SimplePhone
             # Update WAV header with actual data size
             WAVEncoder.update_header(file, data_size)
           end
-          Log.debug { "Media dumping stopped, WAV file saved to /tmp/media_dumper.wav" }
+          Log.debug { "Media dumping stopped, WAV file saved to #{media_dump_path}" }
         rescue ex : Exception
           Log.error { "Media dumping error: #{ex.message}" }
         end
       end
     end
 
-    def next
-      start
+    def next(context : Context)
+      start(context)
       # Wait for ACK or other messages
       begin
         message, _ = @inbound_socket.receive
@@ -286,7 +299,7 @@ class SimplePhone
       @action = "send_register"
     end
 
-    def next
+    def next(context : Context)
       request = SIPUtils::Network::SIP::Request.new("REGISTER", "sip:#{@realm}", "SIP/2.0")
       request.headers["Via"] = "SIP/2.0/UDP #{@inbound_socket.local_address}"
       request.headers["Max-Forwards"] = "1"
@@ -344,9 +357,9 @@ class SimplePhone
     @state = State::Idle.new
   end
 
-  def setup(server_ip, server_port)
+  def setup(server_ip, server_port, inbound_ip)
     @inbound_socket = UDPSocket.new
-    @inbound_socket.not_nil!.bind("172.15.238.1", 5066)
+    @inbound_socket.not_nil!.bind(inbound_ip, 0)
     @outbound_socket = UDPSocket.new
     @outbound_socket.not_nil!.connect(server_ip, server_port)
   end
@@ -355,20 +368,17 @@ class SimplePhone
     @state = State::Registering.new(@inbound_socket.not_nil!, @outbound_socket.not_nil!, user, password, realm)
   end
 
-  def next
-    @state = @state.next
+  def next(context : Context)
+    @state = @state.next(context)
   end
 end
 
 Log.setup_from_env(default_level: Log::Severity::Debug)
 
+ctx = SimplePhone::Context.new(media_dump_dir: "/tmp")
 phone = SimplePhone.new
-phone.setup("172.15.238.10", 5060)
+phone.setup(server_ip: "172.15.238.10", server_port: 5060, inbound_ip: "172.15.238.1")
 phone.register("1001", "clave", "172.15.238.10")
-# registration process
-phone.next
-
-# wait for incoming call and handle it
 loop do
-  phone.next
+  phone.next(ctx)
 end
