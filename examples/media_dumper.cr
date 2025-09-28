@@ -8,6 +8,37 @@ require "log"
 require "socket"
 require "../src/sip_utils.cr"
 
+module WAVEncoder
+  def self.write_header(file : File, data_size : UInt32)
+    # RIFF header
+    file.write_bytes(0x46464952_u32, IO::ByteFormat::LittleEndian)     # "RIFF"
+    file.write_bytes(36_u32 + data_size, IO::ByteFormat::LittleEndian) # File size - 8
+    file.write_bytes(0x45564157_u32, IO::ByteFormat::LittleEndian)     # "WAVE"
+
+    # fmt chunk
+    file.write_bytes(0x20746d66_u32, IO::ByteFormat::LittleEndian) # "fmt "
+    file.write_bytes(18_u32, IO::ByteFormat::LittleEndian)         # fmt chunk size (16 + 2 for μ-law)
+    file.write_bytes(7_u16, IO::ByteFormat::LittleEndian)          # μ-law format
+    file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)          # Mono
+    file.write_bytes(8000_u32, IO::ByteFormat::LittleEndian)       # 8kHz sample rate
+    file.write_bytes(8000_u32, IO::ByteFormat::LittleEndian)       # Byte rate
+    file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)          # Block align
+    file.write_bytes(8_u16, IO::ByteFormat::LittleEndian)          # 8 bits per sample
+    file.write_bytes(0_u16, IO::ByteFormat::LittleEndian)          # Extra param size
+
+    # data chunk
+    file.write_bytes(0x61746164_u32, IO::ByteFormat::LittleEndian) # "data"
+    file.write_bytes(data_size, IO::ByteFormat::LittleEndian)      # Data size
+  end
+
+  def self.update_header(file : File, data_size : UInt32)
+    file.seek(4, IO::Seek::Set)
+    file.write_bytes(36_u32 + data_size, IO::ByteFormat::LittleEndian)
+    file.seek(42, IO::Seek::Set)
+    file.write_bytes(data_size, IO::ByteFormat::LittleEndian)
+  end
+end
+
 module Random
   LEGIBLE_ALPHANUM = "234679ACDEFGHJKMNPQRTWXYZabcdefghjkmnopqrstwxy"
 
@@ -155,9 +186,13 @@ class SimplePhone
       end
 
       spawn do
-        Log.debug { "Starting media dump to /tmp/media_dumper.raw on port #{@media_socket.local_address.port}" }
+        Log.debug { "Starting media dump to /tmp/media_dumper.wav on port #{@media_socket.local_address.port}" }
         begin
-          File.open("/tmp/media_dumper.raw", "wb") do |file|
+          File.open("/tmp/media_dumper.wav", "wb") do |file|
+            # Write initial WAV header with placeholder data size
+            WAVEncoder.write_header(file, 0_u32)
+            data_size = 0_u32
+
             buffer = Bytes.new(1500)
             packet_count = 0
             loop do
@@ -169,10 +204,12 @@ class SimplePhone
                 rtp_packet = SIPUtils::RTP::Packet.parse(buffer[0, bytes_read])
                 if rtp_packet
                   file.write(rtp_packet.payload)
+                  data_size += rtp_packet.payload.size
                   Log.debug { "Extracted RTP payload: #{rtp_packet.payload.size} bytes (PT: #{rtp_packet.payload_type}, Seq: #{rtp_packet.sequence_number})" }
                 else
                   Log.debug { "Failed to parse RTP packet, writing raw data" }
                   file.write(buffer[0, bytes_read])
+                  data_size += bytes_read
                 end
                 file.flush
                 packet_count += 1
@@ -185,8 +222,11 @@ class SimplePhone
                 break if @stop
               end
             end
+
+            # Update WAV header with actual data size
+            WAVEncoder.update_header(file, data_size)
           end
-          Log.debug { "Media dumping stopped" }
+          Log.debug { "Media dumping stopped, WAV file saved to /tmp/media_dumper.wav" }
         rescue ex : Exception
           Log.error { "Media dumping error: #{ex.message}" }
         end
