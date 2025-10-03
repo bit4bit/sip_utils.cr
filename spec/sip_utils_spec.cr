@@ -54,7 +54,7 @@ describe SIPUtils::Network::SIP do
     response.headers["Call-ID"] = "1234567890@example.com"
     response.headers["CSeq"] = "1 INVITE"
     response.headers["Content-Length"] = "0"
-    SIPUtils::Network.encode(response).should eq("SIP/2.0 200 Ok\r\nVia: SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj\r\nFrom: Alice <sip:alice@example.com>;tag=12345\r\nTo: Bob <sip:bob@example.com>;tag=67890\r\nCall-ID: 1234567890@example.com\r\nCSeq: 1 INVITE\r\nContent-Length: 0\r\n\r\n")
+    SIPUtils::Network.encode(response).should eq("SIP/2.0 200 OK\r\nVia: SIP/2.0/UDP 192.168.1.1:5060;branch=z9hG4bK776asdhj\r\nFrom: Alice <sip:alice@example.com>;tag=12345\r\nTo: Bob <sip:bob@example.com>;tag=67890\r\nCall-ID: 1234567890@example.com\r\nCSeq: 1 INVITE\r\nContent-Length: 0\r\n\r\n")
   end
 
   it "valid?" do

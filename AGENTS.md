@@ -8,12 +8,14 @@
 * Do not add unnecessary code.
 * Do not add additional robustness unless explicitly requested.
 * Do not create examples unless explicitly requested.
+
 # Program
 
 * To execute run first `shards build`.
 
 # Crystal Lang guidelines
 
+* Use interpolation for string concatenation `%q[]`.
 * Use `String.build` when building multiline strings.
 ```
 String.build do |str|
