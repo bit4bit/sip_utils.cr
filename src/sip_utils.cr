@@ -35,7 +35,7 @@ module SIPUtils
         end
       end
 
-      def initialize(@user : String, @realm : String, @via_address : String, @tagger : Tagger = DefaultTagger.new)
+      def initialize(@tagger : Tagger = DefaultTagger.new)
         @cseq = 0
       end
 
@@ -43,44 +43,45 @@ module SIPUtils
         @cseq += 1
       end
 
-      def register
-        SIP::Request.new("REGISTER", "sip:#{@user}@#{@realm}", "SIP/2.0", {
-          "Via"          => "SIP/2.0/UDP #{@via_address};branch=#{@tagger.branch}",
-          "From"         => "<sip:#{@user}@#{@realm}>;tag=#{@tagger.tag}",
-          "To"           => "<sip:#{@user}@#{@realm}>",
-          "Call-ID"      => @tagger.call_id,
-          "CSeq"         => "#{next_cseq} REGISTER",
-          "Max-Forwards" => "1",
-          "Contact"      => "<sip:#{@user}@#{@via_address}>",
-          "Expires"      => "3600",
-          "Allow"        => "INVITE,ACK,BYE,CANCEL,REGISTER",
-          "User-Agent"   => "SIPUtils",
-        })
+      def register(user : String, realm : String, password : String, via_address : String)
+        SIP::Request.new("REGISTER", "sip:#{user}@#{realm}", "SIP/2.0", {
+          "Via"            => "SIP/2.0/UDP #{via_address};branch=#{@tagger.branch}",
+          "From"           => "<sip:#{user}@#{realm}>;tag=#{@tagger.tag}",
+          "To"             => "<sip:#{user}@#{realm}>",
+          "Call-ID"        => @tagger.call_id,
+          "CSeq"           => "#{next_cseq} REGISTER",
+          "Max-Forwards"   => "1",
+          "Contact"        => "<sip:#{user}@#{via_address}>",
+          "Expires"        => "3600",
+          "Allow"          => "INVITE,ACK,BYE,CANCEL,REGISTER",
+          "User-Agent"     => "SIPUtils",
+          "Content-Length" => "0",
+        }, private: {:user => user, :password => password, :realm => realm, :via_address => via_address})
       end
 
-      def www_authenticate(request : SIPUtils::Network::SIP::Request, response : SIPUtils::Network::SIP::Response, password : String)
+      def www_authenticate(request : SIPUtils::Network::SIP::Request, response : SIPUtils::Network::SIP::Response)
         req_authenticate = request.dup
 
-        www_authenticate = response.headers["WWW-Authenticate"]
+        www_authenticate = response.headers["WWW-Authenticate"].to_s
         realm_match = www_authenticate.match(/realm="([^"]*)"/)
         nonce_match = www_authenticate.match(/nonce="([^"]*)"/)
         realm = realm_match.not_nil![1]
         nonce = nonce_match.not_nil![1]
         request.headers["CSeq"] = "#{next_cseq} REGISTER"
         cnonce = @tagger.cnonce
-        authorization_uri = "sip:#{@realm}"
-        ha1_input = "#{@user}:#{realm}:#{password}"
+        authorization_uri = "sip:#{request.private[:realm]}"
+        ha1_input = "#{request.private[:user]}:#{realm}:#{request.private[:password]}"
         ha2_input = "REGISTER:#{authorization_uri}"
         digest_user = Digest::MD5.hexdigest(ha1_input)
         digest_uri = Digest::MD5.hexdigest(ha2_input)
         response_input = "#{digest_user}:#{nonce}:00000001:#{cnonce}:auth:#{digest_uri}"
         digest_response = Digest::MD5.hexdigest(response_input)
-        auth_header = "Digest username=\"#{@user}\",realm=\"#{realm}\",nonce=\"#{nonce}\",uri=\"#{authorization_uri}\",response=\"#{digest_response}\",algorithm=MD5,qop=auth,nc=00000001,cnonce=\"#{cnonce}\""
+        auth_header = "Digest username=\"#{request.private[:user]}\",realm=\"#{realm}\",nonce=\"#{nonce}\",uri=\"#{authorization_uri}\",response=\"#{digest_response}\",algorithm=MD5,qop=auth,nc=00000001,cnonce=\"#{cnonce}\""
         req_authenticate.headers["Authorization"] = auth_header
         req_authenticate
       end
 
-      def answer_invite(request : SIPUtils::Network::SIP::Request, media_address : String, media_port : Int32, session_id : String) : SIPUtils::Network::SIP::Response
+      def answer_invite(request : SIPUtils::Network::SIP::Request, media_address : String, media_port : Int32, session_id : String, via_address : String) : SIPUtils::Network::SIP::Response
         sdp_body = String.build do |str|
           str << "v=0\r\n"
           str << "o=- #{session_id} #{session_id} IN IP4 #{media_address}\r\n"
@@ -97,7 +98,7 @@ module SIPUtils
         headers["To"] = request.headers["To"] + ";tag=#{@tagger.tag}"
         headers["Call-ID"] = request.headers["Call-ID"]
         headers["CSeq"] = request.headers["CSeq"]
-        headers["Contact"] = request.headers["Contact"]
+        headers["Contact"] = "<sip:#{via_address}>"
         headers["Content-Type"] = "application/sdp"
         headers["Content-Length"] = sdp_body.bytesize.to_s
 
@@ -163,10 +164,12 @@ module SIPUtils
       end
     end
 
-    class Request
-      getter :method, :uri, :version, :headers, :body
+    alias Private = Hash(Symbol, String)
 
-      def initialize(@method : String, @uri : String, @version = "SIP/2.0", @headers = Headers.new, @body : String? = nil)
+    class Request
+      getter :method, :uri, :version, :headers, :body, :private
+
+      def initialize(@method : String, @uri : String, @version = "SIP/2.0", @headers = Headers.new, @body : String? = nil, @private = Private.new)
       end
 
       def self.parse_first_line(io : IO)
@@ -194,9 +197,9 @@ module SIPUtils
     end
 
     class Response
-      getter :status, :version, :status_code, :headers, :body
+      getter :status, :version, :status_code, :headers, :body, :private
 
-      def initialize(@status : Status, @status_code : Int32, @version = "SIP/2.0", @headers = Headers.new, @body : String? = nil)
+      def initialize(@status : Status, @status_code : Int32, @version = "SIP/2.0", @headers = Headers.new, @body : String? = nil, @private = Private.new)
       end
 
       def self.parse_first_line(io : IO)

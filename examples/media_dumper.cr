@@ -85,7 +85,7 @@ class SimplePhone
   end
 
   class State::Accepting < StateBehavior
-    def initialize(context @inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request)
+    def initialize(@ua : SIPUtils::Network::UA, @inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request)
     end
 
     def next(context : Context)
@@ -97,7 +97,6 @@ class SimplePhone
         return self
       end
 
-      Log.info { "Received INVITE from #{request.headers["From"]}" }
       Log.debug { "Received INVITE body: #{request.inspect}" }
       # Parse SDP from INVITE body
       body = request.body || ""
@@ -118,37 +117,16 @@ class SimplePhone
       media_socket.read_timeout = 100.milliseconds
       local_media_port = media_socket.local_address.port
 
-      # Create SDP response
-      sdp_body = String.build do |str|
-        str << "v=0\r\n"
-        str << "o=- #{Random.secure_number} #{Random.secure_number} IN IP4 #{@inbound_socket.local_address.address}\r\n"
-        str << "s=-\r\n"
-        str << "c=IN IP4 #{@inbound_socket.local_address.address}\r\n"
-        str << "t=0 0\r\n"
-        str << "m=audio #{local_media_port} RTP/AVP 0\r\n"
-        str << "a=rtpmap:0 PCMU/8000\r\n"
-      end
+      response = @ua.answer_invite(request: request, media_address: media_socket.local_address.address.to_s, media_port: local_media_port, session_id: "0", via_address: @inbound_socket.local_address.to_s)
 
-      # Create response headers
-      headers = SIPUtils::Network::SIP::Headers.new
-      headers["Via"] = request.headers["Via"]
-      headers["From"] = request.headers["From"]
-      headers["To"] = request.headers["To"] + ";tag=#{Random.secure}"
-      headers["Call-ID"] = request.headers["Call-ID"]
-      headers["CSeq"] = request.headers["CSeq"]
-      headers["Contact"] = "<sip:#{@inbound_socket.local_address}>"
-      headers["Content-Type"] = "application/sdp"
-      headers["Content-Length"] = sdp_body.bytesize.to_s
-
-      # Create 200 OK response with body
-      response = SIPUtils::Network::SIP::Response.new(SIPUtils::Network::SIP::Status::Ok, 200, "SIP/2.0", headers, sdp_body)
+      Log.debug { "Answering with response: #{SIPUtils::Network.encode(response)}" }
 
       # Send 200 OK
       @outbound_socket.send(SIPUtils::Network.encode(response))
       Log.info { "Sent 200 OK response with media port #{local_media_port}" }
 
       # Transition to InCall state and return it
-      State::InCall.new(@inbound_socket, @outbound_socket, @root_request, media_socket, remote_media_ip, remote_media_port)
+      State::InCall.new(@ua, @inbound_socket, @outbound_socket, @root_request, media_socket, remote_media_ip, remote_media_port)
     end
   end
 
@@ -158,7 +136,7 @@ class SimplePhone
     @cn_ssrc : UInt32
     @last_packet_time : Time::Span
 
-    def initialize(@inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request, @media_socket : UDPSocket, @remote_ip : String, @remote_port : Int32)
+    def initialize(@ua : SIPUtils::Network::UA, @inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @root_request : SIPUtils::Network::SIP::Request, @media_socket : UDPSocket, @remote_ip : String, @remote_port : Int32)
       @stop = false
       @started = false
       @cn_sequence = 1_u16
@@ -235,7 +213,7 @@ class SimplePhone
             @media_socket.close
             Log.info { "Call ended, media dumping stopped" }
 
-            return State::Accepting.new(@inbound_socket, @outbound_socket, @root_request)
+            return State::Accepting.new(@ua, @inbound_socket, @outbound_socket, @root_request)
           else
             Log.debug { "Ignoring message during call: #{request.method}" }
           end
@@ -333,58 +311,32 @@ class SimplePhone
   end
 
   class State::Registering < StateBehavior
-    def initialize(@inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @user : String, @password : String, @realm : String)
+    def initialize(@ua : SIPUtils::Network::UA, @inbound_socket : UDPSocket, @outbound_socket : UDPSocket, @user : String, @password : String, @realm : String)
       @action = "send_register"
     end
 
     def next(context : Context)
-      request = SIPUtils::Network::SIP::Request.new("REGISTER", "sip:#{@realm}", "SIP/2.0")
-      request.headers["Via"] = "SIP/2.0/UDP #{@inbound_socket.local_address}"
-      request.headers["Max-Forwards"] = "1"
-      request.headers["To"] = "<sip:#{@user}@#{@realm}>"
-      request.headers["From"] = "<sip:#{@user}@#{@realm}>;tag=#{Random.secure}"
-      request.headers["Call-ID"] = UUID.v4.hexstring
-      request.headers["CSeq"] = "1 REGISTER"
-      request.headers["Contact"] = "<sip:#{@user}@#{@inbound_socket.local_address}>;expires=3600"
-      request.headers["User-Agent"] = "SimplePhone"
-      request.headers["Allow"] = "INVITE,ACK,BYE,CANCEL,REGISTER"
-      request.headers["Content-Length"] = "0"
-      Log.debug { "SimplePhone: sending request #{request.inspect}" }
+      request = @ua.register(user: @user, password: @password, realm: @realm, via_address: @inbound_socket.local_address.to_s)
+      Log.debug { "SimplePhone: sending request #{SIPUtils::Network.encode(request)}" }
       @outbound_socket.send(SIPUtils::Network.encode(request))
       @action = "wait_authentication"
-
-      message, _ = @inbound_socket.receive
+      message, _ = @inbound_socket.receive(8096)
       response = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Response).parse(IO::Memory.new(message))
 
       if response.status_code != 401
         raise "not implemented logic for response authentication code #{response.status_code}"
       end
 
-      www_authenticate = response.headers["WWW-Authenticate"]
-      realm_match = www_authenticate.match(/realm="([^"]*)"/)
-      nonce_match = www_authenticate.match(/nonce="([^"]*)"/)
-      realm = realm_match.not_nil![1]
-      nonce = nonce_match.not_nil![1]
-      request.headers["CSeq"] = "2 REGISTER"
-      cnonce = Random.secure
-      authorization_uri = "sip:#{@realm}"
-      ha1_input = "#{@user}:#{realm}:#{@password}"
-      ha2_input = "REGISTER:#{authorization_uri}"
-      digest_user = Digest::MD5.hexdigest(ha1_input)
-      digest_uri = Digest::MD5.hexdigest(ha2_input)
-      response_input = "#{digest_user}:#{nonce}:00000001:#{cnonce}:auth:#{digest_uri}"
-      digest_response = Digest::MD5.hexdigest(response_input)
-      auth_header = "Digest username=\"#{@user}\",realm=\"#{realm}\",nonce=\"#{nonce}\",uri=\"#{authorization_uri}\",response=\"#{digest_response}\",algorithm=MD5,qop=auth,nc=00000001,cnonce=\"#{cnonce}\""
-      request.headers["Authorization"] = auth_header
-
-      @outbound_socket.send(SIPUtils::Network.encode(request))
+      Log.debug { "SimplePhone: received response #{response.inspect}" }
+      with_authentication = @ua.www_authenticate(request, response)
+      @outbound_socket.send(SIPUtils::Network.encode(with_authentication))
 
       message, _ = @inbound_socket.receive
       response = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Response).parse(IO::Memory.new(message))
 
       if response.status_code == 200
         Log.debug { "Registration successful authentication! #{response.inspect}" }
-        return State::Accepting.new(@inbound_socket, @outbound_socket, request)
+        return State::Accepting.new(@ua, @inbound_socket, @outbound_socket, request)
       end
 
       self
@@ -393,6 +345,8 @@ class SimplePhone
 
   def initialize
     @state = State::Idle.new
+    tagger = SIPUtils::Network::UA::DefaultTagger.new
+    @ua = SIPUtils::Network::UA.new(tagger: tagger)
   end
 
   def setup(server_ip, server_port, inbound_ip)
@@ -403,7 +357,7 @@ class SimplePhone
   end
 
   def register(user, password, realm)
-    @state = State::Registering.new(@inbound_socket.not_nil!, @outbound_socket.not_nil!, user, password, realm)
+    @state = State::Registering.new(@ua, @inbound_socket.not_nil!, @outbound_socket.not_nil!, user, password, realm)
   end
 
   def next(context : Context)
