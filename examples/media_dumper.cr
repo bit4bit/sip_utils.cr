@@ -3,9 +3,11 @@
 #
 # RAW TO WAV
 # sox -t raw -r 8000 -e mu-law -c 1 /tmp/media_dumper.raw /tmp/media_dumper.wav
+require "option_parser"
 require "uuid"
 require "log"
 require "socket"
+require "http/web_socket"
 require "../src/sip_utils.cr"
 
 module WAVEncoder
@@ -63,14 +65,10 @@ end
 
 class SimplePhone
   class Context
-    getter :media_dump_dir
+    getter :media_dump_url
 
-    def initialize(@media_dump_dir : String, @prefix : String = "")
-      @media_dump_dir = media_dump_dir
-    end
-
-    def media_dump_path(call_id : String)
-      File.join(@media_dump_dir, "#{@prefix}#{call_id}.wav")
+    def initialize(@media_dump_url : URI)
+      @media_dump_url = media_dump_url
     end
   end
 
@@ -172,7 +170,6 @@ class SimplePhone
     def start(context : Context)
       return if @started
       @started = true
-      media_dump_path = context.media_dump_path(@root_request.headers["Call-ID"])
 
       # Start comfort noise sender
       spawn do
@@ -198,51 +195,11 @@ class SimplePhone
         end
       end
 
-      spawn do
-        Log.debug { "Starting media dump to #{media_dump_path} on port #{@media_socket.local_address.port}" }
-        begin
-          File.open(media_dump_path, "wb") do |file|
-            # Write initial WAV header with placeholder data size
-            WAVEncoder.write_header(file, 0_u32)
-            data_size = 0_u32
-
-            buffer = Bytes.new(1500)
-            packet_count = 0
-            loop do
-              break if @stop
-
-              begin
-                bytes_read, sender_addr = @media_socket.receive(buffer)
-                @last_packet_time = Time.monotonic # Update last packet time
-                rtp_packet = SIPUtils::RTP::Packet.parse(buffer[0, bytes_read])
-                if rtp_packet
-                  file.write(rtp_packet.payload)
-                  data_size += rtp_packet.payload.size
-                  Log.debug { "Extracted RTP payload: #{rtp_packet.payload.size} bytes (PT: #{rtp_packet.payload_type}, Seq: #{rtp_packet.sequence_number})" }
-                else
-                  Log.debug { "Failed to parse RTP packet, writing raw data" }
-                  file.write(buffer[0, bytes_read])
-                  data_size += bytes_read
-                end
-                file.flush
-                packet_count += 1
-                if packet_count % 100 == 0
-                  Log.debug { "Received #{packet_count} media packets (#{bytes_read} bytes from #{sender_addr})" }
-                else
-                  Log.debug { "Received media packet (#{bytes_read} bytes from #{sender_addr})" }
-                end
-              rescue
-                break if @stop
-              end
-            end
-
-            # Update WAV header with actual data size
-            WAVEncoder.update_header(file, data_size)
-          end
-          Log.debug { "Media dumping stopped, WAV file saved to #{media_dump_path}" }
-        rescue ex : Exception
-          Log.error { "Media dumping error: #{ex.message}" }
-        end
+      case context.media_dump_url.scheme
+      when "file"
+        dump_to_file(context.media_dump_url.path)
+      when "ws", "wss"
+        dump_to_websocket(context.media_dump_url)
       end
     end
 
@@ -291,6 +248,94 @@ class SimplePhone
       end
 
       self
+    end
+
+    def dump_to_file(media_dump_path)
+      spawn do
+        Log.debug { "Starting media dump to #{media_dump_path} on port #{@media_socket.local_address.port}" }
+        begin
+          File.open(media_dump_path, "wb") do |file|
+            # Write initial WAV header with placeholder data size
+            WAVEncoder.write_header(file, 0_u32)
+            data_size = 0_u32
+
+            buffer = Bytes.new(1500)
+            packet_count = 0
+            loop do
+              break if @stop
+
+              begin
+                bytes_read, sender_addr = @media_socket.receive(buffer)
+                @last_packet_time = Time.monotonic # Update last packet time
+                rtp_packet = SIPUtils::RTP::Packet.parse(buffer[0, bytes_read])
+                if rtp_packet
+                  file.write(rtp_packet.payload)
+                  data_size += rtp_packet.payload.size
+                  Log.debug { "Extracted RTP payload: #{rtp_packet.payload.size} bytes (PT: #{rtp_packet.payload_type}, Seq: #{rtp_packet.sequence_number})" }
+                else
+                  Log.debug { "Failed to parse RTP packet, writing raw data" }
+                  file.write(buffer[0, bytes_read])
+                  data_size += bytes_read
+                end
+                file.flush
+                packet_count += 1
+                if packet_count % 100 == 0
+                  Log.debug { "Received #{packet_count} media packets (#{bytes_read} bytes from #{sender_addr})" }
+                else
+                  Log.debug { "Received media packet (#{bytes_read} bytes from #{sender_addr})" }
+                end
+              rescue
+                break if @stop
+              end
+            end
+
+            # Update WAV header with actual data size
+            WAVEncoder.update_header(file, data_size)
+          end
+          Log.debug { "Media dumping stopped, WAV file saved to #{media_dump_path}" }
+        rescue ex : Exception
+          Log.error { "Media dumping error: #{ex.message}" }
+        end
+      end
+    end
+
+    def dump_to_websocket(websocket_url : URI)
+      spawn do
+        Log.debug { "Starting media dump to WebSocket #{websocket_url} on port #{@media_socket.local_address.port}" }
+        begin
+          ws = HTTP::WebSocket.new(websocket_url)
+          buffer = Bytes.new(1500)
+          packet_count = 0
+          loop do
+            break if @stop
+
+            begin
+              bytes_read, sender_addr = @media_socket.receive(buffer)
+              @last_packet_time = Time.monotonic
+              rtp_packet = SIPUtils::RTP::Packet.parse(buffer[0, bytes_read])
+              if rtp_packet
+                ws.send(rtp_packet.payload)
+                Log.debug { "Sent RTP payload to WebSocket: #{rtp_packet.payload.size} bytes (PT: #{rtp_packet.payload_type}, Seq: #{rtp_packet.sequence_number})" }
+              else
+                Log.debug { "Failed to parse RTP packet, sending raw data to WebSocket" }
+                ws.send(buffer[0, bytes_read])
+              end
+              packet_count += 1
+              if packet_count % 100 == 0
+                Log.debug { "Sent #{packet_count} media packets to WebSocket (#{bytes_read} bytes from #{sender_addr})" }
+              else
+                Log.debug { "Sent media packet to WebSocket (#{bytes_read} bytes from #{sender_addr})" }
+              end
+            rescue
+              break if @stop
+            end
+          end
+          ws.close
+          Log.debug { "Media dumping to WebSocket stopped" }
+        rescue ex : Exception
+          Log.error { "WebSocket media dumping error: #{ex.message}" }
+        end
+      end
     end
   end
 
@@ -375,10 +420,36 @@ end
 
 Log.setup_from_env(default_level: Log::Severity::Debug)
 
-ctx = SimplePhone::Context.new(media_dump_dir: "/tmp")
+# Default values
+server_ip = "172.15.238.10"
+server_port = 5060
+inbound_ip = "172.15.238.1"
+user = "1001"
+password = "clave"
+realm = "172.15.238.10"
+media_dump_url = "file:///tmp/media_dump.wav"
+
+# Parse command line arguments
+OptionParser.parse do |parser|
+  parser.banner = "Usage: simple_phone [options]"
+
+  parser.on("-s HOST", "--server=HOST", "SIP server IP address") { |host| server_ip = host }
+  parser.on("-p PORT", "--port=PORT", "SIP server port") { |port| server_port = port.to_i }
+  parser.on("-i IP", "--inbound=IP", "Local IP address to bind to") { |ip| inbound_ip = ip }
+  parser.on("-u USER", "--user=USER", "SIP username") { |u| user = u }
+  parser.on("-w PASSWORD", "--password=PASSWORD", "SIP password") { |pw| password = pw }
+  parser.on("-r REALM", "--realm=REALM", "SIP realm") { |r| realm = r }
+  parser.on("-m URL", "--media=URL", "Media dump URL (file:// or ws://)") { |url| media_dump_url = url }
+  parser.on("-h", "--help", "Show this help") do
+    puts parser
+    exit
+  end
+end
+
+ctx = SimplePhone::Context.new(media_dump_url: URI.parse(media_dump_url))
 phone = SimplePhone.new
-phone.setup(server_ip: "172.15.238.10", server_port: 5060, inbound_ip: "172.15.238.1")
-phone.register("1001", "clave", "172.15.238.10")
+phone.setup(server_ip: server_ip, server_port: server_port, inbound_ip: inbound_ip)
+phone.register(user, password, realm)
 loop do
   phone.next(ctx)
 end
