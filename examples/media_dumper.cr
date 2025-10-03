@@ -312,14 +312,7 @@ class SimplePhone
             begin
               bytes_read, sender_addr = @media_socket.receive(buffer)
               @last_packet_time = Time.monotonic
-              rtp_packet = SIPUtils::RTP::Packet.parse(buffer[0, bytes_read])
-              if rtp_packet
-                ws.send(rtp_packet.payload)
-                Log.debug { "Sent RTP payload to WebSocket: #{rtp_packet.payload.size} bytes (PT: #{rtp_packet.payload_type}, Seq: #{rtp_packet.sequence_number})" }
-              else
-                Log.debug { "Failed to parse RTP packet, sending raw data to WebSocket" }
-                ws.send(buffer[0, bytes_read])
-              end
+              ws.send(buffer[0, bytes_read])
               packet_count += 1
               if packet_count % 100 == 0
                 Log.debug { "Sent #{packet_count} media packets to WebSocket (#{bytes_read} bytes from #{sender_addr})" }
