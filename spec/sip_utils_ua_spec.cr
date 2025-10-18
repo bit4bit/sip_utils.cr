@@ -57,6 +57,25 @@ describe SIPUtils::Network::UA do
     )
   end
 
+  it "answer BYE" do
+    tagger = StubTagger.new(branch: "z9hG4bK1234567890", tag: "1234567890", call_id: "1234567890", cnonce: "1234567890")
+    ua = SIPUtils::Network::UA.new(tagger: tagger)
+
+    req_bye = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Request).parse(IO::Memory.new("BYE sip:user@realm SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:5060;branch=z9hG4bK1234567890\r\nFrom: <sip:user@realm>;tag=1234567890\r\nTo: <sip:user@realm>;tag=1234567890\r\nCall-ID: 1234567890\r\nCSeq: 1 BYE\r\nMax-Forwards: 1\r\nContact: <sip:user@127.0.0.1:5060>\r\nAllow: INVITE,ACK,BYE,CANCEL,REGISTER\r\nUser-Agent: SIPUtils\r\n\r\n"))
+    resp = ua.answer_bye(request: req_bye, via_address: "127.0.0.1:5060")
+    SIPUtils::Network.encode(resp).should eq(
+      "SIP/2.0 200 OK\r\n" +
+      "Via: SIP/2.0/UDP 127.0.0.1:5060;branch=z9hG4bK1234567890\r\n" +
+      "From: <sip:user@realm>;tag=1234567890\r\n" +
+      "To: <sip:user@realm>;tag=1234567890\r\n" +
+      "Call-ID: 1234567890\r\n" +
+      "CSeq: 1 BYE\r\n" +
+      "Contact: <sip:127.0.0.1:5060>\r\n" +
+      "Content-Length: 0\r\n" +
+      "\r\n"
+    )
+  end
+
   it "parse latest via address" do
     tagger = StubTagger.new(branch: "z9hG4bK1234567890", tag: "1234567890", call_id: "1234567890", cnonce: "1234567890")
     ua = SIPUtils::Network::UA.new(tagger: tagger)

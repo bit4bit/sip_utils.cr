@@ -106,6 +106,19 @@ module SIPUtils
         SIPUtils::Network::SIP::Response.new(SIPUtils::Network::SIP::Status::Ok, 200, "SIP/2.0", headers, sdp_body)
       end
 
+      def answer_bye(request : SIPUtils::Network::SIP::Request, via_address : String) : SIPUtils::Network::SIP::Response
+        headers = SIPUtils::Network::SIP::Headers.new
+        headers["Via"] = request.headers["Via"]
+        headers["From"] = request.headers["From"]
+        headers["To"] = request.headers["To"]
+        headers["Call-ID"] = request.headers["Call-ID"]
+        headers["CSeq"] = request.headers["CSeq"]
+        headers["Contact"] = "<sip:#{via_address}>"
+        headers["Content-Length"] = "0"
+
+        SIPUtils::Network::SIP::Response.new(SIPUtils::Network::SIP::Status::Ok, 200, "SIP/2.0", headers)
+      end
+
       def parse_via_address(request : SIPUtils::Network::SIP::Request) : Socket::IPAddress
         via = request.headers["Via"].not_nil!
         match = via.match(/UDP\s+([^\s:]+):(\d+)/).not_nil!
