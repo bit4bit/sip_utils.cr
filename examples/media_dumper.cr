@@ -174,8 +174,10 @@ class SimplePhone
       end
 
       case context.media_dump_url.scheme
-      when "file"
-        dump_to_file(context.media_dump_url.path)
+      when "raw"
+        dump_raw_to_file(context.media_dump_url.path)
+      when "wav"
+        dump_to_wav(context.media_dump_url.path)
       when "ws", "wss"
         dump_to_websocket(context.media_dump_url)
       end
@@ -228,7 +230,7 @@ class SimplePhone
       self
     end
 
-    def dump_to_file(media_dump_path)
+    def dump_to_wav(media_dump_path)
       spawn do
         Log.debug { "Starting media dump to #{media_dump_path} on port #{@media_socket.local_address.port}" }
         begin
@@ -273,6 +275,71 @@ class SimplePhone
           Log.debug { "Media dumping stopped, WAV file saved to #{media_dump_path}" }
         rescue ex : Exception
           Log.error { "Media dumping error: #{ex.message}" }
+        end
+      end
+    end
+
+    def dump_to_websocket(websocket_url : URI)
+      spawn do
+        Log.debug { "Starting media dump to WebSocket #{websocket_url} on port #{@media_socket.local_address.port}" }
+        begin
+          ws = HTTP::WebSocket.new(websocket_url)
+          buffer = Bytes.new(1500)
+          packet_count = 0
+          loop do
+            break if @stop
+
+            begin
+              bytes_read, sender_addr = @media_socket.receive(buffer)
+              @last_packet_time = Time.monotonic
+              ws.send(buffer[0, bytes_read])
+              packet_count += 1
+              if packet_count % 100 == 0
+                Log.debug { "Sent #{packet_count} media packets to WebSocket (#{bytes_read} bytes from #{sender_addr})" }
+              else
+                Log.debug { "Sent media packet to WebSocket (#{bytes_read} bytes from #{sender_addr})" }
+              end
+            rescue
+              break if @stop
+            end
+          end
+          ws.close
+          Log.debug { "Media dumping to WebSocket stopped" }
+        rescue ex : Exception
+          Log.error { "WebSocket media dumping error: #{ex.message}" }
+        end
+      end
+    end
+
+    def dump_raw_to_file(media_dump_path)
+      spawn do
+        Log.debug { "Starting raw media dump to #{media_dump_path} on port #{@media_socket.local_address.port}" }
+        begin
+          File.open(media_dump_path, "wb") do |file|
+            buffer = Bytes.new(1500)
+            packet_count = 0
+            loop do
+              break if @stop
+
+              begin
+                bytes_read, sender_addr = @media_socket.receive(buffer)
+                @last_packet_time = Time.monotonic
+                file.write(buffer[0, bytes_read])
+                file.flush
+                packet_count += 1
+                if packet_count % 100 == 0
+                  Log.debug { "Received #{packet_count} raw media packets (#{bytes_read} bytes from #{sender_addr})" }
+                else
+                  Log.debug { "Received raw media packet (#{bytes_read} bytes from #{sender_addr})" }
+                end
+              rescue
+                break if @stop
+              end
+            end
+          end
+          Log.debug { "Raw media dumping stopped, saved to #{media_dump_path}" }
+        rescue ex : Exception
+          Log.error { "Raw media dumping error: #{ex.message}" }
         end
       end
     end
@@ -374,7 +441,7 @@ inbound_ip = "172.15.238.1"
 user = "1001"
 password = "clave"
 realm = "172.15.238.10"
-media_dump_url = "file:///tmp/media_dump.wav"
+media_dump_url = "wav:///tmp/media_dump.wav"
 
 # Parse command line arguments
 OptionParser.parse do |parser|
@@ -386,7 +453,7 @@ OptionParser.parse do |parser|
   parser.on("-u USER", "--user=USER", "SIP username") { |u| user = u }
   parser.on("-w PASSWORD", "--password=PASSWORD", "SIP password") { |pw| password = pw }
   parser.on("-r REALM", "--realm=REALM", "SIP realm") { |r| realm = r }
-  parser.on("-m URL", "--media=URL", "Media dump URL (file:// or ws://)") { |url| media_dump_url = url }
+  parser.on("-m URL", "--media=URL", "Media dump URL (raw:// or wav:// or ws://)") { |url| media_dump_url = url }
   parser.on("-h", "--help", "Show this help") do
     puts parser
     exit
