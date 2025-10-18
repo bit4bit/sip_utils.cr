@@ -1,5 +1,6 @@
 require "random"
 require "digest"
+require "socket"
 
 module SIPUtils
   VERSION = "0.1.0"
@@ -103,6 +104,15 @@ module SIPUtils
         headers["Content-Length"] = sdp_body.bytesize.to_s
 
         SIPUtils::Network::SIP::Response.new(SIPUtils::Network::SIP::Status::Ok, 200, "SIP/2.0", headers, sdp_body)
+      end
+
+      def parse_via_address(request : SIPUtils::Network::SIP::Request) : Socket::IPAddress
+        via = request.headers["Via"].not_nil!
+        match = via.match(/UDP\s+([^\s:]+):(\d+)/).not_nil!
+        host = match[1]
+        port = match[2].to_i
+
+        Socket::IPAddress.new(host.not_nil!, port.not_nil!)
       end
     end
 

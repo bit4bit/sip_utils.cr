@@ -39,7 +39,7 @@ describe SIPUtils::Network::UA do
     ua = SIPUtils::Network::UA.new(tagger: tagger)
 
     req_invite = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Request).parse(IO::Memory.new("INVITE sip:user@realm SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:5060;branch=z9hG4bK1234567890\r\nFrom: <sip:user@realm>;tag=1234567890\r\nTo: <sip:user@realm>\r\nCall-ID: 1234567890\r\nCSeq: 0 INVITE\r\nMax-Forwards: 1\r\nContact: <sip:user@127.0.0.1:5060>\r\nAllow: INVITE,ACK,BYE,CANCEL,REGISTER\r\nUser-Agent: SIPUtils\r\n\r\n"))
-    resp = ua.answer_invite(request: req_invite, media_address: "127.0.0.1", media_port: 49170, session_id: "0")
+    resp = ua.answer_invite(request: req_invite, media_address: "127.0.0.1", media_port: 49170, session_id: "0", via_address: "127.0.0.1:5060")
     sdp_body = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=SIPUtils\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 49170 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
     content_length = sdp_body.bytesize
     SIPUtils::Network.encode(resp).should eq(
@@ -49,11 +49,20 @@ describe SIPUtils::Network::UA do
       "To: <sip:user@realm>;tag=1234567890\r\n" +
       "Call-ID: 1234567890\r\n" +
       "CSeq: 0 INVITE\r\n" +
-      "Contact: <sip:user@127.0.0.1:5060>\r\n" +
+      "Contact: <sip:127.0.0.1:5060>\r\n" +
       "Content-Type: application/sdp\r\n" +
       "Content-Length: #{content_length}\r\n" +
       "\r\n" +
       sdp_body
     )
+  end
+
+  it "parse latest via address" do
+    tagger = StubTagger.new(branch: "z9hG4bK1234567890", tag: "1234567890", call_id: "1234567890", cnonce: "1234567890")
+    ua = SIPUtils::Network::UA.new(tagger: tagger)
+
+    req_invite = SIPUtils::Network::SIP(SIPUtils::Network::SIP::Request).parse(IO::Memory.new("INVITE sip:user@realm SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:5060;branch=z9hG4bK1234567890\r\nFrom: <sip:user@realm>;tag=1234567890\r\nTo: <sip:user@realm>\r\nCall-ID: 1234567890\r\nCSeq: 0 INVITE\r\nMax-Forwards: 1\r\nContact: <sip:user@127.0.0.1:5060>\r\nAllow: INVITE,ACK,BYE,CANCEL,REGISTER\r\nUser-Agent: SIPUtils\r\n\r\n"))
+    ua.parse_via_address(req_invite).address.should eq("127.0.0.1")
+    ua.parse_via_address(req_invite).port.should eq(5060)
   end
 end
