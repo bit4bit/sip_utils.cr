@@ -82,7 +82,7 @@ module SIPUtils
         req_authenticate
       end
 
-      def answer_invite(request : SIPUtils::Network::SIP::Request, media_address : String, media_port : Int32, session_id : String, via_address : String, pcmu_rate = 8000) : SIPUtils::Network::SIP::Response
+      def answer_invite(request : SIPUtils::Network::SIP::Request, media_address : String, media_port : Int32, session_id : String, via_address : String, codec = SIPUtils::Codec.pcmu) : SIPUtils::Network::SIP::Response
         sdp_body = String.build do |str|
           str << "v=0\r\n"
           str << "o=- #{session_id} #{session_id} IN IP4 #{media_address}\r\n"
@@ -90,7 +90,7 @@ module SIPUtils
           str << "c=IN IP4 #{media_address}\r\n"
           str << "t=0 0\r\n"
           str << "m=audio #{media_port} RTP/AVP 0\r\n"
-          str << "a=rtpmap:0 PCMU/#{pcmu_rate}\r\n"
+          str << "a=rtpmap:#{codec.ianacode} #{codec.iananame}/#{codec.rate}\r\n"
         end
 
         headers = SIPUtils::Network::SIP::Headers.new
@@ -172,6 +172,17 @@ module SIPUtils
       else
         raise SIP::SIPError.new("Unsupported message type")
       end
+    end
+  end
+
+  class Codec
+    getter :ianacode, :iananame, :rate
+
+    def initialize(@ianacode : String, @iananame : String, @rate : UInt32)
+    end
+
+    def self.pcmu : Codec
+      self.new(ianacode: "0", iananame: "PCMU", rate: 8000)
     end
   end
 
